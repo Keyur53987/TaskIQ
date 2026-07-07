@@ -1,5 +1,7 @@
 # TaskIQ: AI Project Manager
 
+**🌍 Live Demo:** [https://taskiq-9j8s.onrender.com](https://taskiq-9j8s.onrender.com)
+
 An intelligent project management tool that leverages Google's Gemini LLM to automatically convert unstructured meeting notes, emails, and chat logs into structured, actionable tasks. 
 
 Built with an **AI Engineering-first** philosophy, this project emphasizes production-ready prompt engineering, structured LLM outputs, robust error handling, and intuitive frontend interactions.
