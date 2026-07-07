@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TaskIQ: AI Project Manager</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="hero">
+        <div class="container">
+            <h1>TaskIQ: AI Project Manager</h1>
+            <p>Paste your meeting notes below and let AI extract actionable tasks for your team.</p>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Input Section -->
+        <section class="card input-section">
+            <h2>Extract Tasks</h2>
+            <textarea id="notes-input" placeholder="Paste meeting notes or task descriptions here..."></textarea>
+            <button id="extract-btn" class="btn primary">Extract Tasks</button>
+            <div id="loading" class="hidden">Extracting tasks... <span class="spinner"></span></div>
+        </section>
+
+        <!-- Tabs Navigation -->
+        <div class="tabs-nav">
+            <button class="tab-btn active" data-tab="tab-list">All Tasks</button>
+            <button class="tab-btn" data-tab="tab-kanban">Kanban Board</button>
+            <button class="tab-btn" data-tab="tab-summary">AI Summary</button>
+        </div>
+
+        <!-- Tab 1: All Tasks -->
+        <div id="tab-list" class="tab-content active">
+            <section class="filters-section">
+                <div class="filters">
+                    <input type="text" id="filter-owner" placeholder="Filter by Owner">
+                    <select id="filter-status">
+                        <option value="">All Statuses</option>
+                        <option value="To Do">To Do</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Done">Done</option>
+                    </select>
+                    <select id="filter-priority">
+                        <option value="">All Priorities</option>
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                    </select>
+                    <button id="apply-filters-btn" class="btn secondary">Apply Filters</button>
+                </div>
+                <div class="actions">
+                    <button id="export-csv-btn" class="btn secondary">Export CSV</button>
+                </div>
+            </section>
+            <section class="task-list-section">
+                <div id="task-list" class="task-grid">
+                    <!-- Task cards injected here via JS -->
+                </div>
+            </section>
+        </div>
+
+        <!-- Tab 2: Kanban Board -->
+        <div id="tab-kanban" class="tab-content hidden">
+            <div id="kanban-board" class="kanban-board">
+                <div class="kanban-col" data-status="To Do">
+                    <h3>To Do</h3>
+                    <div class="kanban-dropzone"></div>
+                </div>
+                <div class="kanban-col" data-status="In Progress">
+                    <h3>In Progress</h3>
+                    <div class="kanban-dropzone"></div>
+                </div>
+                <div class="kanban-col" data-status="Done">
+                    <h3>Done</h3>
+                    <div class="kanban-dropzone"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 3: AI Summary -->
+        <div id="tab-summary" class="tab-content hidden">
+            <button id="summary-btn" class="btn primary">Generate AI Summary <span class="spinner hidden" id="summary-loading"></span></button>
+            <section id="summary-panel" class="card hidden" style="margin-top: 1rem;">
+                <h2>AI Project Status Summary</h2>
+                <div id="summary-content" class="markdown-body"></div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Edit Modal -->
+    <div id="edit-modal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2>Edit Task</h2>
+            <form id="edit-form">
+                <input type="hidden" id="edit-id">
+                <label>Description: <textarea id="edit-description"></textarea></label>
+                <label>Due Date: <input type="text" id="edit-due-date"></label>
+                <label>Owner: <input type="text" id="edit-owner"></label>
+                <label>Priority: 
+                    <select id="edit-priority">
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                    </select>
+                </label>
+                <label>Status:
+                    <select id="edit-status">
+                        <option value="To Do">To Do</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Done">Done</option>
+                    </select>
+                </label>
+                <button type="submit" class="btn primary">Save Changes</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
