@@ -53,7 +53,7 @@ try:
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(env["APP_URL"])
         page.locator("#application").wait_for(state="visible")
-        page.locator("summary").click()
+        page.get_by_text("Workspace & account settings", exact=True).click()
         page.locator("#workspace-name").fill("Delivery team")
         page.locator("#workspace-form button").click()
         page.locator("#role-label").filter(has_text="Admin").wait_for()
@@ -72,7 +72,7 @@ try:
         page.locator("#invite-form button").click()
         page.locator("#invite-result").wait_for(state="visible")
         assert "#invite=" in page.locator("#invite-link").input_value()
-        page.locator("summary").click()
+        page.get_by_text("Workspace & account settings", exact=True).click()
         page.screenshot(path=str(OUT / "phase1-desktop.png"), full_page=True)
         page.locator('[data-tab="tab-kanban"]').click()
         assert page.locator('.kanban-col[data-status="To Do"] .task-card').count() == 1
@@ -80,12 +80,62 @@ try:
         page.locator('[data-tab="tab-list"]').click()
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
         page.screenshot(path=str(OUT / "phase1-mobile.png"), full_page=True)
+        page.set_viewport_size({"width": 1440, "height": 1000})
+        page.locator('#open-meetings').click()
+        page.locator('#meeting-title').fill('Launch review')
+        source = '🚀 Notes. Aman will update the guide by Friday.\nSarah will check the login flow.'
+        page.locator('#transcript-file').set_input_files({'name': 'meeting.vtt', 'mimeType': 'text/vtt', 'buffer': source.encode('utf8')})
+        page.wait_for_function("value => document.getElementById('meeting-source').value === value", arg=source)
+        page.locator('#save-meeting').click()
+        try:
+            page.locator('#meeting-detail-title').filter(has_text='Launch review').wait_for(timeout=10000)
+        except Exception:
+            print('Meeting UI diagnostic:', page.evaluate("({notice:document.getElementById('notice').textContent,title:document.getElementById('meeting-detail-title').textContent,classes:document.getElementById('meeting-detail').className,active:[...document.querySelectorAll('.tab-content.active')].map(el=>el.id)})"))
+            print('Browser errors:', errors)
+            page.screenshot(path=str(OUT / 'phase2-failure.png'), full_page=True)
+            raise
+        assert page.locator('#saved-source').text_content() == source
+        assert page.locator('#extract-proposals').is_hidden()  # Manual review works with AI off.
+        page.locator('#new-proposal').click()
+        page.locator('#manual-description').fill('Update the guide')
+        page.locator('#manual-quote').fill('Aman will update the guide by Friday.')
+        page.locator('#manual-due').fill('Friday')
+        page.locator('#save-proposal').click()
+        pending = page.locator('.proposal-card').filter(has_text='Pending')
+        pending.wait_for()
+        assert 'Missing owner' in pending.locator('.review-warning').inner_text()
+        assert 'Deadline needs clarification' in pending.locator('.review-warning').inner_text()
+        pending.get_by_role('button', name='Highlight in saved source').click()
+        assert page.locator('#saved-source mark').inner_text() == 'Aman will update the guide by Friday.'
+        pending.locator('[name=description]').fill('Review the onboarding guide')
+        pending.locator('[name=due_date]').fill('2026-11-06')
+        pending.locator('[name=assignee_id]').select_option(label='QA Admin')
+        pending.get_by_role('button', name='Accept task', exact=True).click()
+        page.locator('.proposal-card').filter(has_text='Accepted').wait_for()
+        page.locator('#new-proposal').click()
+        page.locator('#manual-description').fill('Check login flow')
+        page.locator('#manual-quote').fill('Sarah will check the login flow.')
+        page.locator('#save-proposal').click()
+        page.locator('.proposal-card').filter(has_text='Pending').get_by_role('button', name='Reject', exact=True).click()
+        page.locator('.proposal-card').filter(has_text='Rejected').wait_for()
+        page.screenshot(path=str(OUT / 'phase2-desktop.png'), full_page=True)
+        page.locator('[data-tab=tab-list]').click()
+        assert page.locator('#task-list .task-card').count() == 2
+        sourced = page.locator('#task-list .task-card').filter(has_text='Review the onboarding guide')
+        with page.expect_response(lambda response: '/meetings/' in response.url and response.request.method == 'GET'):
+            sourced.get_by_role('button', name='Source: Launch review').click()
+        page.locator('.proposal-card').filter(has_text='Accepted').wait_for()
+        page.locator('#saved-source mark').wait_for()
+        assert page.locator('#saved-source mark').inner_text() == 'Aman will update the guide by Friday.'
+        page.set_viewport_size({'width': 390, 'height': 844})
+        assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+        page.screenshot(path=str(OUT / 'phase2-mobile.png'), full_page=True)
         page.locator("#logout").click()
         page.locator("#login-panel").wait_for(state="visible")
         assert page.locator("#application").is_hidden()
         assert not errors, errors
         browser.close()
-    print("Browser smoke passed: workspace, project, task assignment, XSS-safe display, invitation, Kanban, mobile, logout")
+    print("Browser smoke passed: accounts, board, transcript upload, exact Unicode evidence highlight, edited acceptance, rejection, provenance link, desktop/mobile, logout")
 finally:
     server.terminate()
     server.wait(timeout=15)

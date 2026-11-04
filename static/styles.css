@@ -448,3 +448,27 @@ dialog .modal-content { max-width: none; }
 .dialog-actions { display: flex; gap: .5rem; }
 #summary-panel { margin-top: 1rem; }
 #task-count { margin-top: 1rem; }
+
+.tabs-nav { flex-wrap: wrap; gap: .5rem; }
+.section-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin: 1.25rem 0; }
+.section-row h2 { margin-bottom: .3rem; }
+.section-row .btn { margin-top: 0; }
+.meeting-list, .proposal-list { display: grid; gap: 1rem; margin: 1rem 0; }
+.meeting-card, .proposal-card { border: 1px solid var(--border-color); border-radius: 8px; padding: 1.25rem; background: var(--card-bg); min-width: 0; }
+.meeting-open { margin-top: 0; text-align: left; justify-content: flex-start; max-width: 100%; overflow-wrap: anywhere; }
+.review-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+.source-text { white-space: pre-wrap; overflow-wrap: anywhere; padding: 1rem; max-height: 420px; overflow-y: auto; font: .85rem/1.8 ui-monospace, Consolas, monospace; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-color); margin-top: 1rem; }
+.source-text mark { background: #f6d76b; color: #17140b; padding: .1rem; }
+.evidence-quote { white-space: pre-wrap; overflow-wrap: anywhere; border-left: 3px solid var(--text-muted); padding: .75rem 1rem; background: var(--bg-color); font-size: .88rem; margin: .75rem 0; }
+.proposal-card .eyebrow { margin-top: 1rem; }
+.proposal-card h3 { margin-top: 0; }
+.proposal-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem 1rem; margin-bottom: 1rem; }
+.proposal-card form { margin-top: 1rem; }
+.review-warning { border: 1px solid #b88627; border-radius: 5px; padding: .5rem .75rem; font-size: .8rem; margin-bottom: .75rem; }
+.review-description { margin-top: 1.25rem; font-weight: 600; overflow-wrap: anywhere; }
+.review-heading { margin: 1.5rem 0 .5rem; }
+#meeting-source { min-height: 180px; }
+#proposal-modal .modal-content { max-width: none; }
+.task-card .btn, .proposal-card .btn { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+#meeting-detail-title, #meeting-detail-meta { overflow-wrap: anywhere; }
+@media (max-width: 520px) { .proposal-fields { grid-template-columns: 1fr; } .meeting-card, .proposal-card { padding: 1rem; } }

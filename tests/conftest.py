@@ -81,3 +81,14 @@ def project(client, account):
     workspace = client.post("/api/workspaces", json={"name": "Team"}).json()
     project = client.post(f"/api/workspaces/{workspace['id']}/projects", json={"name": "Launch"}).json()
     return user, workspace, project
+
+
+@pytest.fixture
+def meeting(client, project):
+    user, workspace, p = project
+    response = client.post(f"/api/projects/{p['id']}/meetings", json={
+        "request_id": str(uuid.uuid4()), "title": "Launch planning", "meeting_date": "2026-11-04",
+        "timezone": "Asia/Kolkata", "source_text": "🚀 Meeting notes. Aman will update the guide by Friday. Sarah will check the login flow.",
+    })
+    assert response.status_code == 201, response.text
+    return user, workspace, p, response.json()["meeting"]

@@ -1,8 +1,8 @@
-# TaskIQ Phase 1: system design and launch runbook
+# TaskIQ: system design and launch runbook
 
 ## Architecture
 
-Use a same-origin modular monolith. FastAPI serves the static UI and API; PostgreSQL stores identity, memberships, projects, tasks, sessions, invitations, OAuth flows and quotas. Google verifies identity; TaskIQ enforces authorization. No microservices or recording pipeline is required for Phase 1.
+Use a same-origin modular monolith. FastAPI serves the static UI and API; PostgreSQL stores identity, memberships, projects, tasks, sessions, invitations, OAuth flows, quotas, immutable meeting sources and reviewed proposals. Google verifies identity; TaskIQ enforces authorization. No microservices or recording pipeline is required for Phases 1–2.
 
 ```mermaid
 flowchart LR
@@ -55,7 +55,7 @@ Sources: [Google OIDC](https://developers.google.com/identity/openid-connect/ope
 
 Quota upserts are atomic and shared across workers. Fixed windows permit boundary bursts; quotas are not billing entitlements. Failed operations still consume budget. The AI semaphore is process-local: two workers allow four concurrent calls; four such replicas allow sixteen. Define the aggregate worker/replica budget before enabling AI publicly.
 
-Database transactions are released during provider requests. AI is bounded synchronous work, not a durable queue: a process restart can lose in-flight extraction, and user retries may duplicate tasks. Keep AI disabled for an initial Phase 1 rollout if durable execution is required. Background jobs and idempotency belong in the next processing phase.
+Database transactions are released during provider requests. AI is bounded synchronous work, not a durable queue. Phase 2 retains the source, records extraction state and permits recovery of stale attempts; extraction retries do not regenerate a completed review set. Task creation requires explicit, versioned review and is guarded against replay duplicates. Cross-meeting semantic duplicates are not detected. Background jobs remain future work. See PHASE2.md for the exact concurrency and retention contract.
 
 PostgreSQL is required for public deployments; SQLite is development-only. Pool pre-ping handles stale pooled connections, not transaction retries. Indexed membership checks and project task keyset pagination avoid full-board and OFFSET scans. Four replicas of two processes can consume 80 DB connections before operators/migrations; size the database or pooler accordingly. This is connection arithmetic, not measured traffic capacity. [SQLAlchemy pooling](https://docs.sqlalchemy.org/en/20/core/pooling.html)
 
@@ -88,12 +88,12 @@ Disable/sanitize callback query-string logging at the proxy. Pass request IDs th
 | Removed member | Subsequent authorization denied; in-progress AI rechecks before saving |
 | Leaked invite/session | Revoke invite or sign out all sessions; stored hashes alone cannot authenticate |
 | Provider quota/saturation | 429 and Retry-After; no unbounded provider queue |
-| Invalid model output | Reject before saving; no partial extraction |
-| Interrupted extraction or client retry | Work can be lost or duplicated; durable jobs/idempotency are future work |
+| Invalid model output / unlocatable evidence | Retain source, reject entire batch, mark extraction Failed; no tasks created |
+| Interrupted extraction or client retry | Retained source and extraction lease allow retry; completed review sets and acceptance are replay-safe; durable jobs remain future work |
 
 ## Scope and remaining work
 
-Phase 1 covers accounts/profiles, sessions, workspaces/projects, roles/invitations, member assignments, task CRUD and deployment foundations. It does not include meeting bots/capture, transcript approvals, audit event storage, account self-deletion/export, enterprise SSO, billing, per-project ACLs, task edit conflict detection or durable jobs. Document an operator-assisted data deletion process before promising it in a public privacy policy. Public terms/privacy and AI disclosures must match actual operation.
+Phase 1 covers accounts/profiles, sessions, workspaces/projects, roles/invitations, member assignments, task CRUD and deployment foundations. Phase 2 adds immutable meeting text, transcript imports, source quotes, proposal editing and explicit accept/reject decisions with reviewer/time and version checks. It does not include meeting bots/audio capture, source-transcript editing, general audit event storage, account self-deletion/export, enterprise SSO, billing, per-project ACLs, task-edit conflict detection or durable jobs. Proposal versions protect review edits, not subsequent board-task edits. Document an operator-assisted data deletion process before promising it in a public privacy policy. Public terms/privacy and AI disclosures must match actual operation.
 
 The next differentiating work is Project Change Review and Commitment History, then scope approvals/unresolved commitments, then dependency-based impact. These remain roadmap items rather than Phase 1 claims.
 

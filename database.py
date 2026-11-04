@@ -2,9 +2,10 @@
 import os
 import time
 import uuid
+from datetime import date
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, event, String, Text, Integer, ForeignKey, CheckConstraint, Index
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from sqlalchemy import create_engine, event, String, Text, Integer, Date, ForeignKey, CheckConstraint, Index, UniqueConstraint
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, relationship
 
 load_dotenv()
 
@@ -57,6 +58,8 @@ class Task(Base):
     assignee_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     priority: Mapped[str] = mapped_column(String(10), default="Medium")
     status: Mapped[str] = mapped_column(String(20), default="To Do")
+    source_proposal_id: Mapped[str | None] = mapped_column(ForeignKey("task_proposals.id", ondelete="RESTRICT", name="fk_task_source_proposal"), nullable=True, unique=True)
+    source_proposal = relationship("TaskProposal", lazy="joined")
     __table_args__ = (CheckConstraint("priority IN ('High','Medium','Low')", name="task_priority"), CheckConstraint("status IN ('To Do','In Progress','Done')", name="task_status"), Index("ix_tasks_project_id", "project_id", "id"))
 
 
@@ -94,6 +97,62 @@ class RateBucket(Base):
     window: Mapped[int] = mapped_column(Integer, primary_key=True)
     count: Mapped[int] = mapped_column(Integer)
     expires_at: Mapped[int] = mapped_column(Integer, index=True)
+
+
+class Meeting(Base):
+    __tablename__ = "meetings"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(160))
+    meeting_date: Mapped[date] = mapped_column(Date)
+    timezone: Mapped[str] = mapped_column(String(64))
+    source_type: Mapped[str] = mapped_column(String(12))
+    source_filename: Mapped[str] = mapped_column(String(200), default="")
+    source_text: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[int] = mapped_column(Integer, default=lambda: int(time.time()))
+    request_id: Mapped[str] = mapped_column(String(36))
+    input_hash: Mapped[str] = mapped_column(String(64))
+    extraction_status: Mapped[str] = mapped_column(String(12), default="Draft")
+    extraction_attempt: Mapped[int] = mapped_column(Integer, default=0)
+    extraction_started_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    __table_args__ = (
+        UniqueConstraint("project_id", "request_id", name="uq_meeting_request"),
+        CheckConstraint("source_type IN ('notes','transcript')", name="meeting_source_type"),
+        CheckConstraint("extraction_status IN ('Draft','Extracting','Ready','Failed')", name="meeting_extraction_status"),
+        Index("ix_meetings_project_created", "project_id", "created_at", "id"),
+    )
+
+
+class TaskProposal(Base):
+    __tablename__ = "task_proposals"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    meeting_id: Mapped[str] = mapped_column(ForeignKey("meetings.id", ondelete="CASCADE"), index=True)
+    description: Mapped[str] = mapped_column(Text)
+    due_date: Mapped[str] = mapped_column(String(100), default="")
+    owner: Mapped[str] = mapped_column(String(120), default="")
+    assignee_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    priority: Mapped[str] = mapped_column(String(10), default="Medium")
+    source_quote: Mapped[str] = mapped_column(Text)
+    source_start: Mapped[int] = mapped_column(Integer)
+    source_end: Mapped[int] = mapped_column(Integer)
+    origin: Mapped[str] = mapped_column(String(10))
+    status: Mapped[str] = mapped_column(String(10), default="Pending")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[int] = mapped_column(Integer, default=lambda: int(time.time()))
+    reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    decision_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    request_id: Mapped[str] = mapped_column(String(36), default=new_id)
+    input_hash: Mapped[str] = mapped_column(String(64))
+    meeting = relationship("Meeting", lazy="joined")
+    __table_args__ = (
+        UniqueConstraint("meeting_id", "request_id", name="uq_proposal_request"),
+        CheckConstraint("priority IN ('High','Medium','Low')", name="proposal_priority"),
+        CheckConstraint("status IN ('Pending','Accepted','Rejected')", name="proposal_status"),
+        CheckConstraint("origin IN ('AI','Manual')", name="proposal_origin"),
+        CheckConstraint("source_start >= 0 AND source_end > source_start", name="proposal_source_range"),
+    )
 
 
 def build_engine(url):

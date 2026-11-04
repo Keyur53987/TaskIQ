@@ -1,6 +1,6 @@
 # TaskIQ
 
-TaskIQ turns meeting notes into project tasks. Phase 1 adds Google sign-in, private workspaces, projects, roles, invitations, and member assignments to the existing board.
+TaskIQ turns meeting notes into reviewed project tasks. Phase 1 provides Google sign-in, private workspaces, projects, roles, invitations, and member assignments. Phase 2 adds saved meeting sources, transcript imports, source-backed task proposals and explicit review before task creation.
 
 ## Run locally (Python 3.12)
 
@@ -24,7 +24,7 @@ Without credentials, protected APIs remain closed and the landing page explains 
 1. Sign in, open **Workspace & account settings**, create a workspace, and add a project.
 2. Create invitation links for teammates' Google account emails. Share them yourself; TaskIQ does not send email. Links expire after seven days and can be revoked. They are shown only when generated. Reissuing an invitation invalidates the previous link.
 3. Invitees sign in with the exact invited email and explicitly accept. Acceptance is single-use and never changes an existing member's role.
-4. Add tasks manually or use existing Gemini extraction when enabled. Assign actual workspace members or retain a free-text owner. Unknown names from notes are not silently mapped to accounts.
+4. Add tasks manually, or open **Meetings & review** to save notes/transcripts, generate proposals when Gemini is enabled, and edit/accept/reject them. Accepted tasks link back to their meeting and exact source passage. Unknown names are not silently mapped to accounts.
 5. Admins manage roles/removal. The last Admin cannot be demoted or removed. Removal revokes access and clears assignments in that workspace.
 
 | Capability | Admin | Member | Viewer |
@@ -79,4 +79,4 @@ For the existing `ai-project-manager-f6yk.onrender.com` prototype, follow [the R
 
 For local Docker/PostgreSQL verification, set a URL-safe `POSTGRES_PASSWORD` in `.env` and run `docker compose up --build`. The app binds `127.0.0.1:8000`; PostgreSQL is not exposed to the host. This is not a public TLS deployment.
 
-AI extraction retains its existing immediate-save behavior; review/approval is Phase 2. Set `AI_ENABLED=false` to run without Gemini. Production defaults to AI disabled unless explicitly enabled. Browser/audio capture and meeting bots are not implemented in Phase 1.
+Read [the Phase 2 workflow and migration notes](docs/PHASE2.md). Extraction saves pending proposals; only explicit acceptance creates board tasks. The old immediate-save extraction endpoint returns 410. Set `AI_ENABLED=false` to run without Gemini: meeting records and manual evidence-backed proposals still work. Production defaults to AI disabled unless explicitly enabled. Browser/audio capture and meeting bots are not implemented.
