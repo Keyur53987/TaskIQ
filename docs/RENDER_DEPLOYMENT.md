@@ -1,7 +1,7 @@
 # Update the existing TaskIQ prototype on Render
 
-Target service: https://ai-project-manager-f6yk.onrender.com  
-Source: https://github.com/keyur53987/taskiq  
+Target service: https://ai-project-manager-f6yk.onrender.com
+Source: https://github.com/keyur53987/taskiq
 Default repository branch verified: `master`.
 
 The owner confirmed that the prototype has no active users and no data that needs preserving. Start Phase 1 with a new empty PostgreSQL database. Do not run the legacy import command. No existing databases or files need to be deleted to make this work.
