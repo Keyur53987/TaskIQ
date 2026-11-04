@@ -3,121 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TaskIQ: AI Project Manager</title>
+    <title>TaskIQ · Your team’s project workspace</title>
     <link rel="stylesheet" href="/static/styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="/static/app.js" defer></script>
 </head>
 <body>
-    <header class="hero">
-        <div class="container">
-            <h1>TaskIQ: AI Project Manager</h1>
-            <p>Paste your meeting notes below and let AI extract actionable tasks for your team.</p>
-        </div>
-    </header>
-
+    <header class="hero"><div class="container header-row">
+        <div><p class="eyebrow">TASKIQ</p><h1>From discussion to delivery.</h1><p>A private place for your team’s work.</p></div>
+        <div id="account" class="hidden"><span id="account-name"></span><button id="logout" class="btn secondary">Sign out</button></div>
+    </div></header>
     <main class="container">
-        <!-- Input Section -->
-        <section class="card input-section">
-            <h2>Extract Tasks</h2>
-            <textarea id="notes-input" placeholder="Paste meeting notes or task descriptions here..."></textarea>
-            <button id="extract-btn" class="btn primary">Extract Tasks</button>
-            <div id="loading" class="hidden">Extracting tasks... <span class="spinner"></span></div>
+        <p id="notice" class="notice hidden" role="status" aria-live="polite"></p>
+        <section id="login-panel" class="card">
+            <p class="eyebrow">YOUR WORK, TOGETHER</p><h2>Welcome to TaskIQ</h2>
+            <p>Organize projects, turn notes into tasks, and keep your team moving.</p>
+            <a id="google-login" class="btn primary hidden" href="/api/auth/google">Continue with Google</a>
+            <p id="login-help" class="muted">Checking sign-in availability…</p>
         </section>
-
-        <!-- Tabs Navigation -->
-        <div class="tabs-nav">
-            <button class="tab-btn active" data-tab="tab-list">All Tasks</button>
-            <button class="tab-btn" data-tab="tab-kanban">Kanban Board</button>
-            <button class="tab-btn" data-tab="tab-summary">AI Summary</button>
-        </div>
-
-        <!-- Tab 1: All Tasks -->
-        <div id="tab-list" class="tab-content active">
-            <section class="filters-section">
-                <div class="filters">
-                    <input type="text" id="filter-owner" placeholder="Filter by Owner">
-                    <select id="filter-status">
-                        <option value="">All Statuses</option>
-                        <option value="To Do">To Do</option>
-                        <option value="In Progress">In Progress</option>
-                        <option value="Done">Done</option>
-                    </select>
-                    <select id="filter-priority">
-                        <option value="">All Priorities</option>
-                        <option value="High">High</option>
-                        <option value="Medium">Medium</option>
-                        <option value="Low">Low</option>
-                    </select>
-                    <button id="apply-filters-btn" class="btn secondary">Apply Filters</button>
-                </div>
-                <div class="actions">
-                    <button id="export-csv-btn" class="btn secondary">Export CSV</button>
-                </div>
+        <section id="invite-panel" class="card hidden"><h2>Join your team</h2><p>An invitation is ready. Sign in with the Google email address your team invited, then accept it.</p><button id="accept-invite" class="btn primary hidden">Accept invitation</button><button id="dismiss-invite" class="btn secondary">Dismiss</button></section>
+        <div id="application" class="hidden">
+            <section class="card workspace-bar">
+                <div><label for="workspace-select">Workspace</label><select id="workspace-select"></select></div>
+                <div><label for="project-select">Project</label><select id="project-select"></select></div>
+                <span id="role-label" class="badge"></span>
             </section>
-            <section class="task-list-section">
-                <div id="task-list" class="task-grid">
-                    <!-- Task cards injected here via JS -->
+            <details class="card"><summary>Workspace & account settings</summary>
+                <div class="settings-grid">
+                    <form id="workspace-form"><h3>Create a workspace</h3><label for="workspace-name">Workspace name</label><input id="workspace-name" required maxlength="100" placeholder="e.g. Product team"><button class="btn primary">Create workspace</button></form>
+                    <form id="project-form" class="admin-only hidden"><h3>Add a project</h3><label for="project-name">Project name</label><input id="project-name" required maxlength="100" placeholder="e.g. Website launch"><button class="btn primary">Create project</button></form>
+                    <form id="profile-form"><h3>Your profile</h3><label for="profile-name">Display name</label><input id="profile-name" required maxlength="120"><button class="btn secondary">Save name</button><button id="logout-all" type="button" class="btn secondary">Sign out all devices</button></form>
                 </div>
-            </section>
-        </div>
-
-        <!-- Tab 2: Kanban Board -->
-        <div id="tab-kanban" class="tab-content hidden">
-            <div id="kanban-board" class="kanban-board">
-                <div class="kanban-col" data-status="To Do">
-                    <h3>To Do</h3>
-                    <div class="kanban-dropzone"></div>
-                </div>
-                <div class="kanban-col" data-status="In Progress">
-                    <h3>In Progress</h3>
-                    <div class="kanban-dropzone"></div>
-                </div>
-                <div class="kanban-col" data-status="Done">
-                    <h3>Done</h3>
-                    <div class="kanban-dropzone"></div>
-                </div>
+                <section id="team-section" class="hidden"><h3>Team members</h3><p class="muted">Roles apply to every project in this workspace.</p><ul id="member-list" class="people-list"></ul>
+                    <form id="invite-form" class="admin-only hidden"><h3>Invite a teammate</h3><label for="invite-email">Google account email</label><input id="invite-email" type="email" required maxlength="254"><label for="invite-role">Role</label><select id="invite-role"><option>Member</option><option>Viewer</option><option>Admin</option></select><button class="btn primary">Create invitation link</button></form>
+                    <div id="invite-result" class="hidden"><label for="invite-link">Share this link with the invited person. It expires in seven days.</label><input id="invite-link" readonly><button id="copy-invite" class="btn secondary">Copy link</button></div>
+                    <div class="admin-only hidden"><h3>Pending invitations</h3><ul id="invitation-list" class="people-list"></ul></div>
+                </section>
+            </details>
+            <section id="empty-state" class="card hidden"><h2>Start with a workspace and project</h2><p>Open settings above to create your workspace. Workspace Admins can add projects and invite teammates.</p></section>
+            <div id="project-content" class="hidden">
+                <section class="card input-section editor-only"><h2>Your project tasks</h2><div class="ai-only"><label for="notes-input">Meeting notes or task descriptions</label><textarea id="notes-input" maxlength="20000" placeholder="Paste your notes here…"></textarea><button id="extract-btn" class="btn primary">Extract tasks</button><p id="loading" class="hidden">Extracting tasks…</p></div><button id="new-task" class="btn secondary">Add task manually</button></section>
+                <nav class="tabs-nav" aria-label="Project views"><button class="tab-btn active" data-tab="tab-list">All tasks</button><button class="tab-btn" data-tab="tab-kanban">Kanban board</button><button class="tab-btn editor-only" data-tab="tab-summary">AI summary</button></nav>
+                <div class="filters-section"><form id="filters" class="filters"><input id="filter-owner" aria-label="Filter by owner" placeholder="Filter by owner" maxlength="120"><select id="filter-status" aria-label="Filter by status"><option value="">All statuses</option><option>To Do</option><option>In Progress</option><option>Done</option></select><select id="filter-priority" aria-label="Filter by priority"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select><button class="btn secondary">Apply filters</button></form><button id="export-csv-btn" class="btn secondary">Export loaded tasks</button></div>
+                <section id="tab-list" class="tab-content active"><div id="task-list" class="task-grid"></div></section>
+                <section id="tab-kanban" class="tab-content hidden"><div class="kanban-board"><div class="kanban-col" data-status="To Do"><h3>To Do</h3><div class="kanban-dropzone"></div></div><div class="kanban-col" data-status="In Progress"><h3>In Progress</h3><div class="kanban-dropzone"></div></div><div class="kanban-col" data-status="Done"><h3>Done</h3><div class="kanban-dropzone"></div></div></div></section>
+                <section id="tab-summary" class="tab-content hidden"><button id="summary-btn" class="btn primary">Generate project summary</button><section id="summary-panel" class="card hidden"><h2>Project status</h2><div id="summary-content" class="summary-text"></div></section></section>
+                <button id="load-more" class="btn secondary hidden">Load more tasks</button><p id="task-count" class="muted"></p>
             </div>
         </div>
-
-        <!-- Tab 3: AI Summary -->
-        <div id="tab-summary" class="tab-content hidden">
-            <button id="summary-btn" class="btn primary">Generate AI Summary <span class="spinner hidden" id="summary-loading"></span></button>
-            <section id="summary-panel" class="card hidden" style="margin-top: 1rem;">
-                <h2>AI Project Status Summary</h2>
-                <div id="summary-content" class="markdown-body"></div>
-            </section>
-        </div>
     </main>
-
-    <!-- Edit Modal -->
-    <div id="edit-modal" class="modal hidden">
-        <div class="modal-content">
-            <span class="close-btn">&times;</span>
-            <h2>Edit Task</h2>
-            <form id="edit-form">
-                <input type="hidden" id="edit-id">
-                <label>Description: <textarea id="edit-description"></textarea></label>
-                <label>Due Date: <input type="text" id="edit-due-date"></label>
-                <label>Owner: <input type="text" id="edit-owner"></label>
-                <label>Priority: 
-                    <select id="edit-priority">
-                        <option value="High">High</option>
-                        <option value="Medium">Medium</option>
-                        <option value="Low">Low</option>
-                    </select>
-                </label>
-                <label>Status:
-                    <select id="edit-status">
-                        <option value="To Do">To Do</option>
-                        <option value="In Progress">In Progress</option>
-                        <option value="Done">Done</option>
-                    </select>
-                </label>
-                <button type="submit" class="btn primary">Save Changes</button>
-            </form>
-        </div>
-    </div>
-
-    <script src="/static/app.js"></script>
+    <dialog id="edit-modal"><form id="edit-form" class="modal-content"><h2 id="task-dialog-title">Edit task</h2><input id="edit-id" type="hidden"><label for="edit-description">Description</label><textarea id="edit-description" required maxlength="4000"></textarea><label for="edit-due-date">Due date</label><input id="edit-due-date" maxlength="100" placeholder="YYYY-MM-DD"><label for="edit-assignee">Team assignee</label><select id="edit-assignee"><option value="">Unassigned / named owner</option></select><label for="edit-owner">Named owner (when not assigned to a member)</label><input id="edit-owner" maxlength="120"><label for="edit-priority">Priority</label><select id="edit-priority"><option>High</option><option selected>Medium</option><option>Low</option></select><label for="edit-status">Status</label><select id="edit-status"><option>To Do</option><option>In Progress</option><option>Done</option></select><div class="dialog-actions"><button class="btn primary">Save task</button><button id="close-modal" type="button" class="btn secondary">Cancel</button></div></form></dialog>
 </body>
 </html>

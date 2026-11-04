@@ -421,3 +421,30 @@ textarea {
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+
+.header-row, .workspace-bar { display: flex; gap: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.workspace-bar > div { flex: 1; min-width: 180px; }
+.eyebrow { font-size: .72rem !important; letter-spacing: .14em; font-weight: 700; margin-bottom: .6rem; }
+.badge { border: 1px solid var(--border-color); border-radius: 99px; padding: .25rem .7rem; font-size: .8rem; }
+.muted { color: var(--text-muted); font-size: .85rem; margin: .6rem 0; }
+.notice { border: 1px solid var(--border-color); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin: 1rem 0 2rem; }
+summary { cursor: pointer; font-weight: 600; }
+h3 { font-size: .95rem; margin: 1rem 0 .5rem; }
+label { font-size: .85rem; display: block; margin-top: .6rem; }
+.people-list { list-style: none; }
+.people-list li { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; padding: .75rem 0; border-bottom: 1px solid var(--border-color); }
+.people-list li span { flex: 1; min-width: 160px; overflow-wrap: anywhere; }
+.people-list select { width: auto; }
+.people-list .btn, #account .btn { margin-top: 0; }
+.summary-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-desc { overflow-wrap: anywhere; margin-top: .75rem; }
+.btn:disabled { opacity: .5; cursor: wait; }
+a.btn { text-decoration: none; }
+button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--text-muted); outline-offset: 3px; }
+dialog { margin: auto; border: 0; border-radius: 8px; max-width: min(95vw, 500px); max-height: 90vh; overflow-y: auto; color: var(--text-main); background: var(--card-bg); }
+dialog::backdrop { background: rgb(0 0 0 / .55); }
+dialog .modal-content { max-width: none; }
+.dialog-actions { display: flex; gap: .5rem; }
+#summary-panel { margin-top: 1rem; }
+#task-count { margin-top: 1rem; }

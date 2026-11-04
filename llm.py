@@ -56,7 +56,7 @@ def _get_client() -> genai.Client:
             "GEMINI_API_KEY environment variable is not set. "
             "Please add it to your .env file. See .env.example for reference."
         )
-    return genai.Client(api_key=api_key)
+    return genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=20000, retry_options=types.HttpRetryOptions(attempts=1)))
 
 
 @retry(
@@ -119,6 +119,7 @@ def extract_tasks_from_text(text: str) -> list[dict]:
                 response_mime_type="application/json",
                 response_schema=TaskExtractionResponse,
                 temperature=0.1,
+                max_output_tokens=8192,
             ),
         )
 
@@ -131,8 +132,8 @@ def extract_tasks_from_text(text: str) -> list[dict]:
         logger.error(f"Failed to parse LLM response as JSON: {e}")
         raise RuntimeError(f"LLM returned invalid JSON: {e}")
     except Exception as e:
-        logger.warning(f"LLM extraction failed (will retry if allowed): {e}")
-        raise RuntimeError(f"Task extraction failed: {e}")
+        logger.warning("LLM extraction failed")
+        raise RuntimeError("Task extraction failed") from e
 
 
 def summarize_project_status(tasks: list[dict]) -> str:
@@ -186,11 +187,11 @@ def summarize_project_status(tasks: list[dict]) -> str:
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.3),
+            config=types.GenerateContentConfig(temperature=0.3, max_output_tokens=1024),
         )
         summary = response.text
         logger.info("Project summary generated successfully.")
         return summary
     except Exception as e:
-        logger.error(f"Failed to generate project summary: {e}")
-        raise RuntimeError(f"Summary generation failed: {e}")
+        logger.error("Failed to generate project summary")
+        raise RuntimeError("Summary generation failed") from e

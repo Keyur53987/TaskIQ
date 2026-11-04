@@ -1,149 +1,186 @@
-"""
-routers/tasks.py - API endpoints for task management.
-
-Provides RESTful endpoints for extracting, reading, updating, and deleting tasks,
-as well as generating AI-powered project summaries.
-"""
-
+"""All task operations require an explicit project and current workspace membership."""
 import logging
-from typing import Optional
-
-from fastapi import APIRouter, HTTPException, Body
-from pydantic import BaseModel, Field
-
-import database
+from contextlib import contextmanager
+from threading import BoundedSemaphore
+from typing import Literal
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select, func
+from sqlalchemy.orm import Session
 import llm
+import config
+from database import get_db, Task, User, Membership
+from security import Identity, identity, project_access, membership, mutation_limit, rate_limit
 
+router = APIRouter(prefix="/api/projects/{project_id}/tasks", tags=["tasks"])
 logger = logging.getLogger(__name__)
+AI_SLOTS = BoundedSemaphore(2)
 
-router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+
+@contextmanager
+def ai_slot():
+    if not config.AI_ENABLED:
+        raise HTTPException(503, "AI features are not enabled on this installation")
+    if not AI_SLOTS.acquire(blocking=False):
+        raise HTTPException(429, "AI processing is busy; please retry shortly", headers={"Retry-After": "20"})
+    try:
+        yield
+    finally:
+        AI_SLOTS.release()
 
 
-# --- Request / Response Models ---
+class TaskFields(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    description: str = Field(min_length=1, max_length=4000, pattern=r"\S")
+    due_date: str = Field(default="", max_length=100)
+    owner: str = Field(default="", max_length=120)
+    assignee_id: str | None = Field(default=None, max_length=36)
+    priority: Literal["High", "Medium", "Low"] = "Medium"
+    status: Literal["To Do", "In Progress", "Done"] = "To Do"
+
+
+class TaskUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    description: str | None = Field(default=None, min_length=1, max_length=4000, pattern=r"\S")
+    due_date: str | None = Field(default=None, max_length=100)
+    owner: str | None = Field(default=None, max_length=120)
+    assignee_id: str | None = Field(default=None, max_length=36)
+    priority: Literal["High", "Medium", "Low"] | None = None
+    status: Literal["To Do", "In Progress", "Done"] | None = None
+
 
 class ExtractRequest(BaseModel):
-    """Request body for the task extraction endpoint."""
-    text: str = Field(
-        ...,
-        min_length=10,
-        description="The unstructured meeting notes or task descriptions to parse.",
-        examples=["John needs to finalize the report by Friday. Sarah will handle the database migration — high priority."],
-    )
+    text: str = Field(min_length=10, max_length=20000)
 
 
-class TaskResponse(BaseModel):
-    """Standard response for a single task."""
-    id: int
-    description: str
-    due_date: Optional[str] = None
-    owner: Optional[str] = None
-    priority: str = "Medium"
-    status: str = "To Do"
+def task_json(t):
+    return {k: getattr(t, k) for k in ("id", "project_id", "description", "due_date", "owner", "assignee_id", "priority", "status")}
 
 
-class TaskUpdateRequest(BaseModel):
-    """Request body for updating a task. All fields are optional."""
-    description: Optional[str] = None
-    due_date: Optional[str] = None
-    owner: Optional[str] = None
-    priority: Optional[str] = Field(None, pattern="^(High|Medium|Low)$")
-    status: Optional[str] = Field(None, pattern="^(To Do|In Progress|Done)$")
+def assignment(db, workspace_id, data):
+    assignee_id = data.get("assignee_id")
+    if assignee_id:
+        if not db.get(Membership, (workspace_id, assignee_id)):
+            raise HTTPException(422, "Assignee must be a current workspace member")
+        data["owner"] = db.get(User, assignee_id).name
+    elif "assignee_id" in data and "owner" not in data:
+        data["owner"] = ""
 
 
-class MessageResponse(BaseModel):
-    """Generic message response."""
-    message: str
+def writable(db, project_id, user_id):
+    project, _ = project_access(db, project_id, user_id, write=True)
+    # Serialize task writes with assignment/membership changes for integrity.
+    membership(db, project.workspace_id, user_id, {"Admin", "Member"}, lock=True)
+    return project
 
 
-class SummaryResponse(BaseModel):
-    """Response body for the project summary endpoint."""
-    summary: str
+@router.get("")
+def list_tasks(project_id: str, owner: str = Query("", max_length=120), status: Literal["To Do", "In Progress", "Done"] | None = None, priority: Literal["High", "Medium", "Low"] | None = None, limit: int = Query(100, ge=1, le=100), before: int | None = Query(None, ge=1), auth: Identity = Depends(identity), db: Session = Depends(get_db)):
+    project_access(db, project_id, auth.user.id)
+    query = select(Task).where(Task.project_id == project_id)
+    if owner:
+        query = query.where(Task.owner.icontains(owner, autoescape=True))
+    if status:
+        query = query.where(Task.status == status)
+    if priority:
+        query = query.where(Task.priority == priority)
+    if before:
+        query = query.where(Task.id < before)
+    rows = list(db.scalars(query.order_by(Task.id.desc()).limit(limit + 1)))
+    return {"tasks": [task_json(t) for t in rows[:limit]], "next_cursor": rows[limit - 1].id if len(rows) > limit else None}
 
 
-# --- Endpoints ---
-
-@router.post("/extract", response_model=dict, summary="Extract tasks from text")
-def extract_tasks(req: ExtractRequest) -> dict:
-    """
-    Accept unstructured text (meeting notes, emails, etc.), send it to the LLM
-    for intelligent parsing, and save the extracted tasks to the database.
-    """
-    logger.info(f"Received extraction request ({len(req.text)} chars).")
-    try:
-        extracted = llm.extract_tasks_from_text(req.text)
-        if not extracted:
-            logger.warning("LLM returned zero tasks from the input.")
-            return {"tasks": [], "message": "No actionable tasks were found in the input."}
-        saved_tasks = database.create_tasks(extracted)
-        return {"tasks": saved_tasks}
-    except ValueError as e:
-        logger.error(f"Configuration error during extraction: {e}")
-        raise HTTPException(status_code=503, detail=str(e))
-    except RuntimeError as e:
-        logger.error(f"LLM error during extraction: {e}")
-        raise HTTPException(status_code=502, detail=str(e))
-    except Exception as e:
-        logger.error(f"Unexpected error during extraction: {e}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred during task extraction.")
+@router.post("", status_code=201)
+def create_task(project_id: str, body: TaskFields, auth: Identity = Depends(identity), db: Session = Depends(get_db)):
+    mutation_limit(db, auth.user.id)
+    project = writable(db, project_id, auth.user.id)
+    data = body.model_dump()
+    assignment(db, project.workspace_id, data)
+    task = Task(project_id=project_id, **data)
+    db.add(task)
+    db.commit()
+    return task_json(task)
 
 
-@router.get("", response_model=list[TaskResponse], summary="List all tasks")
-def get_all_tasks(
-    owner: Optional[str] = None,
-    status: Optional[str] = None,
-    priority: Optional[str] = None,
-) -> list[dict]:
-    """
-    Retrieve all tasks, optionally filtered by owner (partial match),
-    status, or priority.
-    """
-    return database.get_tasks(owner=owner, status=status, priority=priority)
+def ai_budget(db, project_id, user_id):
+    project_access(db, project_id, user_id, write=True)
+    rate_limit(db, "ai-user:" + user_id, 5, 60)
+    project, _ = project_access(db, project_id, user_id, write=True)
+    rate_limit(db, "ai-workspace:" + project.workspace_id, 100, 86400)
+    # Release read transactions/connections before network I/O.
+    db.commit()
 
 
-@router.get("/summary", response_model=SummaryResponse, summary="Get AI project summary")
-def get_project_summary() -> dict:
-    """
-    Generate an AI-powered executive summary of the current project status.
-    Analyzes all tasks and produces a concise stakeholder-ready report.
-    """
-    logger.info("Generating project summary.")
-    try:
-        all_tasks = database.get_tasks()
-        summary = llm.summarize_project_status(all_tasks)
-        return {"summary": summary}
-    except ValueError as e:
-        raise HTTPException(status_code=503, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+@router.post("/extract")
+def extract(project_id: str, body: ExtractRequest, auth: Identity = Depends(identity), db: Session = Depends(get_db)):
+    ai_budget(db, project_id, auth.user.id)
+    with ai_slot():
+        try:
+            raw = llm.extract_tasks_from_text(body.text)
+            if len(raw) > 100:
+                raise ValueError("Too many extracted tasks")
+            # Validate model output locally; ignore the legacy explanation field.
+            values = [TaskFields.model_validate({k: v for k, v in t.items() if k != "reasoning"}).model_dump() for t in raw]
+        except Exception:
+            logger.warning("Task extraction failed")
+            raise HTTPException(502, "Task extraction is unavailable; please try again later")
+    writable(db, project_id, auth.user.id)  # Re-check after potentially long external work.
+    tasks = [Task(project_id=project_id, **v) for v in values]
+    db.add_all(tasks)
+    db.commit()
+    return {"tasks": [task_json(t) for t in tasks]}
 
 
-@router.get("/{task_id}", response_model=TaskResponse, summary="Get a single task")
-def get_single_task(task_id: int) -> dict:
-    """Retrieve a single task by its ID."""
-    task = database.get_task(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found.")
+@router.post("/summary")
+def summary(project_id: str, auth: Identity = Depends(identity), db: Session = Depends(get_db)):
+    ai_budget(db, project_id, auth.user.id)
+    if db.scalar(select(func.count()).select_from(Task).where(Task.project_id == project_id)) > 500:
+        raise HTTPException(422, "Summary currently supports projects with up to 500 tasks")
+    tasks = [task_json(t) for t in db.scalars(select(Task).where(Task.project_id == project_id).limit(500))]
+    db.commit()
+    with ai_slot():
+        try:
+            text = llm.summarize_project_status(tasks)
+        except Exception:
+            logger.warning("Project summary failed")
+            raise HTTPException(502, "Summary is unavailable; please try again later")
+    project_access(db, project_id, auth.user.id, write=True)
+    return {"summary": text}
+
+
+def find_task(db, project_id, task_id):
+    task = db.scalar(select(Task).where(Task.id == task_id, Task.project_id == project_id))
+    if task is None:
+        raise HTTPException(404, "Task not found")
     return task
 
 
-@router.put("/{task_id}", response_model=TaskResponse, summary="Update a task")
-def update_task(task_id: int, task_update: TaskUpdateRequest) -> dict:
-    """Update one or more fields of a task by its ID."""
-    # Only send non-None fields to the database layer
-    update_data = task_update.model_dump(exclude_none=True)
-    if not update_data:
-        raise HTTPException(status_code=400, detail="No valid fields provided for update.")
-
-    updated = database.update_task(task_id, update_data)
-    if not updated:
-        raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found.")
-    return updated
+@router.get("/{task_id}")
+def get_task(project_id: str, task_id: int, auth: Identity = Depends(identity), db: Session = Depends(get_db)):
+    project_access(db, project_id, auth.user.id)
+    return task_json(find_task(db, project_id, task_id))
 
 
-@router.delete("/{task_id}", response_model=MessageResponse, summary="Delete a task")
-def delete_task(task_id: int) -> dict:
-    """Delete a task by its ID."""
-    deleted = database.delete_task(task_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found.")
-    return {"message": f"Task {task_id} deleted successfully."}
+@router.put("/{task_id}")
+def update_task(project_id: str, task_id: int, body: TaskUpdate, auth: Identity = Depends(identity), db: Session = Depends(get_db)):
+    mutation_limit(db, auth.user.id)
+    project = writable(db, project_id, auth.user.id)
+    task = find_task(db, project_id, task_id)
+    data = body.model_dump(exclude_unset=True)
+    if not data or any(v is None for k, v in data.items() if k != "assignee_id"):
+        raise HTTPException(422, "Provide valid task fields")
+    if "owner" in data and task.assignee_id and "assignee_id" not in data:
+        data["assignee_id"] = None
+    assignment(db, project.workspace_id, data)
+    for key, value in data.items():
+        setattr(task, key, value)
+    db.commit()
+    return task_json(task)
+
+
+@router.delete("/{task_id}", status_code=204)
+def delete_task(project_id: str, task_id: int, auth: Identity = Depends(identity), db: Session = Depends(get_db)):
+    mutation_limit(db, auth.user.id)
+    writable(db, project_id, auth.user.id)
+    db.delete(find_task(db, project_id, task_id))
+    db.commit()

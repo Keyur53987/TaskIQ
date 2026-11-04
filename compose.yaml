@@ -1,0 +1,41 @@
+# Local PostgreSQL verification stack. TLS/reverse proxy is required for public deployment.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: taskiq
+      POSTGRES_USER: taskiq
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taskiq -d taskiq"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  migrate:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://taskiq:${POSTGRES_PASSWORD}@db:5432/taskiq
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+  app:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://taskiq:${POSTGRES_PASSWORD}@db:5432/taskiq
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,urllib.parse,config; urllib.request.urlopen(urllib.request.Request('http://localhost:8000/health/ready',headers={'Host':urllib.parse.urlparse(config.APP_URL).netloc}),timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+volumes:
+  postgres_data:

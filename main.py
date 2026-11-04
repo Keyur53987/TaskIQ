@@ -1,69 +1,113 @@
-"""
-main.py - Entry point for the AI Project Manager Assistant.
-
-Configures logging, initializes the database, and mounts the
-FastAPI application with API routes and static file serving.
-"""
-
+"""Same-origin web application. Schema changes run explicitly through Alembic."""
 import logging
-import os
-
-from fastapi import FastAPI
+import time
+import uuid
+from contextlib import asynccontextmanager
+from pathlib import Path
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from dotenv import load_dotenv
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+from sqlalchemy import text
+import config
+from database import engine
+from routers import auth, workspaces, tasks
 
-import database
-from routers import tasks
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logger = logging.getLogger("taskiq")
+ROOT = Path(__file__).resolve().parent
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
 
-load_dotenv()
+@asynccontextmanager
+async def lifespan(app):
+    config.validate()
+    startup_engine = engine
+    # Fail before serving traffic when migrations have not been applied.
+    with startup_engine.connect() as connection:
+        version = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        if version != "0001_phase1":
+            raise RuntimeError("Apply database migrations: alembic upgrade head")
+    yield
+    startup_engine.dispose()
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Application
-# ---------------------------------------------------------------------------
+app = FastAPI(title="TaskIQ", version="2.0.0", lifespan=lifespan, docs_url=None if config.PRODUCTION else "/docs", redoc_url=None, openapi_url=None if config.PRODUCTION else "/openapi.json")
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=config.ALLOWED_HOSTS)
 
-app = FastAPI(
-    title="Mini AI Project Manager Assistant",
-    description=(
-        "An intelligent tool that converts unstructured meeting notes "
-        "into structured, actionable tasks using LLMs."
-    ),
-    version="1.0.0",
-)
 
-# ---------------------------------------------------------------------------
-# Startup Events
-# ---------------------------------------------------------------------------
+class BodyLimitMiddleware:
+    """Bound chunked as well as Content-Length bodies before JSON parsing."""
+    def __init__(self, app):
+        self.app = app
 
-@app.on_event("startup")
-def on_startup() -> None:
-    """Initialize the database on application startup."""
-    logger.info("Starting AI Project Manager Assistant...")
-    database.init_db()
-    logger.info("Application ready.")
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        chunks, total = [], 0
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            body = message.get("body", b"")
+            total += len(body)
+            if total > 131072:
+                return await JSONResponse({"detail": "Request body too large"}, status_code=413)(scope, receive, send)
+            chunks.append(body)
+            if not message.get("more_body", False):
+                break
+        sent = False
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
+        async def replay():
+            nonlocal sent
+            if not sent:
+                sent = True
+                return {"type": "http.request", "body": b"".join(chunks), "more_body": False}
+            return await receive()
+        await self.app(scope, replay, send)
 
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    started = time.monotonic()
+    request_id = uuid.uuid4().hex
+    try:
+        response = await call_next(request)
+    except Exception:
+        # No query strings, request bodies, tokens, or provider exceptions in logs.
+        logger.error("request_failed id=%s", request_id)
+        response = JSONResponse({"detail": "An unexpected error occurred", "request_id": request_id}, status_code=500)
+    response.headers.update({"X-Request-ID": request_id, "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY", "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'", "Permissions-Policy": "camera=(), microphone=(), geolocation=()"})
+    if request.url.path.startswith("/api/") or request.url.path == "/":
+        response.headers["Cache-Control"] = "no-store"
+    if config.PRODUCTION:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000"
+    logger.info("request id=%s method=%s status=%d duration_ms=%d", request_id, request.method, response.status_code, (time.monotonic() - started) * 1000)
+    return response
+
+
+app.add_middleware(BodyLimitMiddleware)
+app.include_router(auth.router)
+app.include_router(workspaces.router)
 app.include_router(tasks.router)
-
-# Serve frontend static assets
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
 
 @app.get("/", include_in_schema=False)
-def read_index() -> FileResponse:
-    """Serve the frontend single-page application."""
-    return FileResponse("static/index.html")
+def index():
+    return FileResponse(ROOT / "static" / "index.html")
+
+
+@app.get("/health/live", include_in_schema=False)
+def live():
+    return {"status": "ok"}
+
+
+@app.get("/health/ready", include_in_schema=False)
+def ready():
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse({"status": "unavailable"}, status_code=503)
+    return {"status": "ready"}

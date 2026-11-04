@@ -1,105 +1,82 @@
-# TaskIQ: AI Project Manager
+# TaskIQ
 
-**🌍 Live Demo:** [https://taskiq-9j8s.onrender.com](https://taskiq-9j8s.onrender.com)
+TaskIQ turns meeting notes into project tasks. Phase 1 adds Google sign-in, private workspaces, projects, roles, invitations, and member assignments to the existing board.
 
-An intelligent project management tool that leverages Google's Gemini LLM to automatically convert unstructured meeting notes, emails, and chat logs into structured, actionable tasks. 
+## Run locally (Python 3.12)
 
-Built with an **AI Engineering-first** philosophy, this project emphasizes production-ready prompt engineering, structured LLM outputs, robust error handling, and intuitive frontend interactions.
-
----
-
-## ✨ Standout Features
-
-### 🧠 Advanced AI Engineering
-- **Structured JSON Extraction**: Uses Gemini's `response_schema` bound to Pydantic models for 100% reliable data parsing (no brittle regex).
-- **Chain of Thought (CoT)**: Forces the model to explicitly reason through prioritization and assignment *before* extracting data, dramatically reducing hallucinations.
-- **Few-Shot Prompting**: Grounded prompt design with concrete examples for accurate edge-case handling.
-- **Resilient Retry Logic**: Built-in exponential backoff via `tenacity` handles transient LLM API failures (e.g., rate limits, 502s) seamlessly.
-- **AI Executive Summary**: Generates a holistic, natural-language status report of the entire project board using context from all active tasks.
-
-### 💻 Enterprise-Grade Full Stack
-- **Interactive Kanban Board**: Fully functional HTML5 drag-and-drop board. Dragging a task instantly syncs its status to the SQLite backend.
-- **Strict Validation & Security**: Backend endpoints are strictly validated via FastAPI and Pydantic. SQLite queries are 100% parameterized to prevent SQL injection.
-- **Testing Suite**: Includes an automated Pytest suite utilizing an in-memory database to ensure API reliability.
-- **Professional UI/UX**: Custom CSS (no bloated frameworks) with an enterprise look-and-feel, Dark Mode support, and a responsive tabbed layout.
-- **Data Portability**: Instantly export your filtered tasks to CSV.
-
----
-
-## 🏗️ Architecture
-
-```mermaid
-graph TD
-    UI[Frontend: Vanilla JS/CSS/HTML] --> |REST API| FA[Backend: FastAPI]
-    FA --> |CRUD| DB[(SQLite Database)]
-    FA --> |Prompt + Data| LLM[Google Gemini API]
-    LLM --> |Structured JSON| FA
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+# Configure Google credentials in .env, then:
+.\.venv\Scripts\python -m alembic upgrade head
+.\.venv\Scripts\python -m uvicorn main:app --port 8000 --no-access-log
 ```
 
----
+Open http://localhost:8000. Use that exact hostname: cookies, CSRF origin checks and OAuth redirects must agree with `APP_URL`.
 
-## 🚀 Getting Started
+Create a Google OAuth **Web application** client in Google Cloud Console. Set the redirect URI to `http://localhost:8000/api/auth/google/callback` locally and `https://YOUR_DOMAIN/api/auth/google/callback` for production. Configure the consent screen/test users or publish it for your intended audience. Put the client ID and secret in `.env`. Only `openid email profile` is requested, not Calendar/Drive access. There is no password database, development login bypass, or authentication SaaS.
 
-### Prerequisites
-- Python 3.9+
-- A Google Gemini API Key
+Without credentials, protected APIs remain closed and the landing page explains that sign-in is not configured. Live Google sign-in requires operator credentials and an interactive check. Tests mock Google's exchange and separately test signed-token validation with generated RSA keys.
 
-### 1. Installation
-Clone the repository and set up a virtual environment:
-```bash
-git clone https://github.com/YourUsername/ai-project-manager.git
-cd ai-project-manager
+## Using Phase 1
 
-python -m venv venv
-source venv/bin/activate  # On Windows use: .\venv\Scripts\activate
+1. Sign in, open **Workspace & account settings**, create a workspace, and add a project.
+2. Create invitation links for teammates' Google account emails. Share them yourself; TaskIQ does not send email. Links expire after seven days and can be revoked. They are shown only when generated. Reissuing an invitation invalidates the previous link.
+3. Invitees sign in with the exact invited email and explicitly accept. Acceptance is single-use and never changes an existing member's role.
+4. Add tasks manually or use existing Gemini extraction when enabled. Assign actual workspace members or retain a free-text owner. Unknown names from notes are not silently mapped to accounts.
+5. Admins manage roles/removal. The last Admin cannot be demoted or removed. Removal revokes access and clears assignments in that workspace.
+
+| Capability | Admin | Member | Viewer |
+|---|---|---|---|
+| Read projects, tasks, team directory; export loaded tasks | Yes | Yes | Yes |
+| Create/edit/delete tasks; assign members | Yes | Yes | No |
+| Extract tasks / generate summaries if enabled | Yes | Yes | No |
+| Create projects, invite/revoke, manage team | Yes | No | No |
+
+Roles apply workspace-wide, including all projects. Project-specific ACLs are not included. Any signed-in user can create a workspace and become its Admin. A workspace supports 200 projects, 200 members and 200 pending invitations. A user can belong to 50 workspaces through creation or invitations. Account settings support name changes and signing out all devices.
+
+## Storage and migrations
+
+The new development database is `taskiq.db`. The original `tasks.db` is **not modified or exposed**: old tasks have no trustworthy user ownership and are never assigned to the first person who signs in.
+
+After signing in and creating an empty target project, its Admin can ask an operator to import the original tasks:
+
+```powershell
+.\.venv\Scripts\python manage.py import-legacy --source tasks.db --project-id PROJECT_UUID --admin-email owner@example.com
 ```
 
-### 2. Install Dependencies
-```bash
-pip install -r requirements.txt
+Back up the source first. The command reads it in read-only mode, validates fields, requires the specified user to be the target workspace Admin, and refuses nonempty projects. IDs are not preserved. The target may be PostgreSQL. Do not repeat an import into a deliberately emptied destination.
+
+Startup checks the expected Alembic revision; it does not create tables. Run migrations once as a release step, never from each web replica.
+
+```powershell
+.\.venv\Scripts\python -m alembic upgrade head
+.\.venv\Scripts\python -m alembic check
+.\.venv\Scripts\python manage.py cleanup
 ```
 
-### 3. Configure Environment Variables
-Copy `.env.example` to `.env` and add your Gemini API key:
-```bash
-cp .env.example .env
-```
-Open `.env` and paste your key: `GEMINI_API_KEY="your_actual_key"`
+Schedule cleanup hourly for expired OAuth flows, sessions, invitations and quota counters. Expiry checks apply even when cleanup has not run.
 
-### 4. Run the Application
-Start the FastAPI server:
-```bash
-uvicorn main:app --reload --port 8000
-```
-Open your browser and navigate to: [http://localhost:8000](http://localhost:8000)
+## Verification
 
----
-
-## 🧪 Running Tests
-
-This project includes a comprehensive suite of unit tests built with `pytest` and `fastapi.testclient`.
-
-To execute the test suite, ensure your virtual environment is activated and run:
-```bash
-pytest
+```powershell
+.\.venv\Scripts\python -m pytest -q
+node --check static/app.js
 ```
 
----
+Set `TASKIQ_TEST_DATABASE_URL` to a **dedicated disposable PostgreSQL test database** to run the same tests there. Tests create/drop a unique schema per test; never use production. CI includes SQLite and PostgreSQL 16 tests, migration drift checks and JavaScript syntax checks.
 
-## 📁 Project Structure
+Optional browser smoke: install Playwright and Chromium in your tooling Python, then run `python scripts/browser_smoke.py`. It uses the repo `.venv` to run an isolated server, seeds a test session directly into its temporary DB, and exercises the UI without adding a login bypass to the app. Screenshots/logs go under ignored `test-results/`. It does not test Google's live consent flow.
 
-```text
-ai-project-manager/
-├── main.py               # FastAPI application entry point
-├── database.py           # SQLite persistence layer and CRUD operations
-├── llm.py                # Google GenAI integration, schemas, and prompts
-├── requirements.txt      # Python dependencies
-├── routers/
-│   └── tasks.py          # API endpoints for task management
-├── static/
-│   ├── index.html        # Main HTML structure and tabbed UI
-│   ├── styles.css        # Custom styling and Kanban layout
-│   └── app.js            # Frontend logic, drag-and-drop, API interactions
-└── tests/
-    └── test_main.py      # Automated test suite
-```
+`requirements.txt` pins the dependency set; `requirements.in` records direct ranges. Review upgrades and refresh the lock in a clean Python 3.12 environment.
+
+## Deployment
+
+Read [the system design and launch runbook](docs/SYSTEM_DESIGN.md). Production requires HTTPS, PostgreSQL, Google OAuth credentials, a configured edge proxy, backups and operational checks. `APP_ENV=production` refuses missing credentials, HTTP origins and SQLite.
+
+For the existing `ai-project-manager-f6yk.onrender.com` prototype, follow [the Render update guide](docs/RENDER_DEPLOYMENT.md). Its old data can be discarded; use a new PostgreSQL database without importing legacy tasks.
+
+For local Docker/PostgreSQL verification, set a URL-safe `POSTGRES_PASSWORD` in `.env` and run `docker compose up --build`. The app binds `127.0.0.1:8000`; PostgreSQL is not exposed to the host. This is not a public TLS deployment.
+
+AI extraction retains its existing immediate-save behavior; review/approval is Phase 2. Set `AI_ENABLED=false` to run without Gemini. Production defaults to AI disabled unless explicitly enabled. Browser/audio capture and meeting bots are not implemented in Phase 1.
