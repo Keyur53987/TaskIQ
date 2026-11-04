@@ -1,82 +1,78 @@
 # TaskIQ
 
-TaskIQ turns meeting notes into project tasks. Phase 1 adds Google sign-in, private workspaces, projects, roles, invitations, and member assignments to the existing board.
+### From discussion to delivery.
 
-## Run locally (Python 3.12)
+TaskIQ is being built as an AI project manager for software teams: understand client goals, propose the engineering work, match it to team capacity, and adapt the delivery plan as work changes.
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python -m pip install -r requirements.txt
-Copy-Item .env.example .env
-# Configure Google credentials in .env, then:
-.\.venv\Scripts\python -m alembic upgrade head
-.\.venv\Scripts\python -m uvicorn main:app --port 8000 --no-access-log
+I am building TaskIQ for delivery leads who need to turn a client's desired outcome into an executable plan. Clients should not have to specify implementation tickets or decide which developer is available. The product direction is to connect requirements, technical breakdown, dependencies, effort and cross-project capacity, with a lead approving the commitments.
+
+## Why TaskIQ?
+
+Meeting notes capture a conversation. A task board captures execution. The connection between them often disappears when someone copies an action item into a card.
+
+TaskIQ keeps that connection. Teams can check what was said, clarify who owns the work and when it is due, and review AI suggestions before making them commitments.
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[Meeting notes or text transcript] --> B[Saved meeting source]
+    B --> C[AI suggestions or manual proposals]
+    C --> D[Review and clarify]
+    D --> E[Accept]
+    D --> F[Reject]
+    E --> G[Project task]
+    G --> H[Track on the board]
+    G -. Original context .-> B
 ```
 
-Open http://localhost:8000. Use that exact hostname: cookies, CSRF origin checks and OAuth redirects must agree with `APP_URL`.
+1. **Bring the team together.** Sign in with Google, create a private workspace, and invite teammates with Admin, Member, or Viewer access.
+2. **Capture the discussion.** Save meeting notes or import a text transcript into a project. The saved source stays unchanged for future reference.
+3. **Propose the work.** Generate task suggestions when AI is enabled, or draft proposals manually. Each proposal includes an exact passage from the source.
+4. **Make the commitment clear.** Review the description, owner, deadline, and priority. Missing owners and unclear dates are flagged for clarification. Edit, accept, or reject each proposal.
+5. **Follow through.** Accepted proposals become project tasks. Track progress in a list or Kanban board and return to the original source whenever context is needed.
 
-Create a Google OAuth **Web application** client in Google Cloud Console. Set the redirect URI to `http://localhost:8000/api/auth/google/callback` locally and `https://YOUR_DOMAIN/api/auth/google/callback` for production. Configure the consent screen/test users or publish it for your intended audience. Put the client ID and secret in `.env`. Only `openid email profile` is requested, not Calendar/Drive access. There is no password database, development login bypass, or authentication SaaS.
+## What TaskIQ offers
 
-Without credentials, protected APIs remain closed and the landing page explains that sign-in is not configured. Live Google sign-in requires operator credentials and an interactive check. Tests mock Google's exchange and separately test signed-token validation with generated RSA keys.
+| Capability | What it helps the team do |
+|---|---|
+| Private workspaces and projects | Keep each team's work organized with controlled access |
+| Invitations and workspace roles | Choose who can administer, contribute, or view |
+| Meeting history and transcript imports | Retain the context behind project work |
+| AI-assisted task proposals | Turn unstructured notes into candidate actions |
+| Review before task creation | Decide which suggestions become commitments |
+| Source evidence and review history | Trace accepted work back to its discussion and reviewer |
+| Owners, priorities, deadlines, and status | Make responsibility and progress visible |
+| List and Kanban views | Manage day-to-day execution |
+| AI summaries, when enabled | Get an overview of the project's tasks |
 
-## Using Phase 1
+Text transcript imports support `.txt`, `.md`, `.vtt`, and `.srt` files. Teams can also create tasks directly for work that does not originate in a meeting.
 
-1. Sign in, open **Workspace & account settings**, create a workspace, and add a project.
-2. Create invitation links for teammates' Google account emails. Share them yourself; TaskIQ does not send email. Links expire after seven days and can be revoked. They are shown only when generated. Reissuing an invitation invalidates the previous link.
-3. Invitees sign in with the exact invited email and explicitly accept. Acceptance is single-use and never changes an existing member's role.
-4. Add tasks manually or use existing Gemini extraction when enabled. Assign actual workspace members or retain a free-text owner. Unknown names from notes are not silently mapped to accounts.
-5. Admins manage roles/removal. The last Admin cannot be demoted or removed. Removal revokes access and clears assignments in that workspace.
+## An example
 
-| Capability | Admin | Member | Viewer |
-|---|---|---|---|
-| Read projects, tasks, team directory; export loaded tasks | Yes | Yes | Yes |
-| Create/edit/delete tasks; assign members | Yes | Yes | No |
-| Extract tasks / generate summaries if enabled | Yes | Yes | No |
-| Create projects, invite/revoke, manage team | Yes | No | No |
+> “Aman will update the onboarding guide by Friday.”
 
-Roles apply workspace-wide, including all projects. Project-specific ACLs are not included. Any signed-in user can create a workspace and become its Admin. A workspace supports 200 projects, 200 members and 200 pending invitations. A user can belong to 50 workspaces through creation or invitations. Account settings support name changes and signing out all devices.
+TaskIQ can propose **Update the onboarding guide**, retain **Aman** as the named owner, and show the supporting sentence. **Friday** remains visible for clarification into a specific date. A reviewer can assign the appropriate teammate, set the date, and accept the proposal. The resulting task keeps its link to the meeting source.
 
-## Storage and migrations
+An exact quote helps the reviewer verify context; it does not guarantee that every AI-generated field is correct. Human review is part of the workflow.
 
-The new development database is `taskiq.db`. The original `tasks.db` is **not modified or exposed**: old tasks have no trustworthy user ownership and are never assigned to the first person who signs in.
+## What I built
 
-After signing in and creating an empty target project, its Admin can ask an operator to import the original tasks:
+TaskIQ combines a collaborative project application with a structured AI extraction and review pipeline.
 
-```powershell
-.\.venv\Scripts\python manage.py import-legacy --source tasks.db --project-id PROJECT_UUID --admin-email owner@example.com
-```
+- **Structured extraction:** meeting text is processed into typed task proposals, and every supporting quote is checked against the saved source before proposals are stored.
+- **Human control:** generation and task creation are separate steps. Only explicit acceptance turns a meeting proposal into a board task.
+- **Traceable decisions:** accepted tasks retain their source, proposal, reviewer, and review time.
+- **Consistent reviews:** version checks detect stale edits, while transactional acceptance and uniqueness constraints guard against duplicate task creation.
+- **Team access:** Google sign-in, server-side sessions, workspace membership, role checks, and member assignments support shared project work.
+- **Verification:** automated checks cover access boundaries, proposal review, retries, concurrency, and schema migrations on SQLite and PostgreSQL, with browser checks for the main workflow.
 
-Back up the source first. The command reads it in read-only mode, validates fields, requires the specified user to be the target workspace Admin, and refuses nonempty projects. IDs are not preserved. The target may be PostgreSQL. Do not repeat an import into a deliberately emptied destination.
+The application uses **Python, FastAPI, Pydantic, SQLAlchemy, PostgreSQL, Google OAuth, and vanilla JavaScript**. AI extraction and summaries use the **Google Gemini API** when enabled.
 
-Startup checks the expected Alembic revision; it does not create tables. Run migrations once as a release step, never from each web replica.
+## Current scope
 
-```powershell
-.\.venv\Scripts\python -m alembic upgrade head
-.\.venv\Scripts\python -m alembic check
-.\.venv\Scripts\python manage.py cleanup
-```
+The capabilities and workflow described above are the current foundation, not the completed AI project manager. The live release provides workspace and task management. The meeting-source and proposal-review workflow is implemented on the review branch; live AI inference still needs verification before it is enabled.
 
-Schedule cleanup hourly for expired OAuth flows, sessions, invitations and quota counters. Expiry checks apply even when cleanup has not run.
+The next milestones are project/team context, AI technical planning, and capacity-aware assignment across projects. Automatic meeting intake is a parallel integration track, followed by controlled replanning and a separately validated TaskIQ meeting participant. These are planned capabilities, not available features. Meeting text entry remains an input fallback rather than the intended product experience.
 
-## Verification
-
-```powershell
-.\.venv\Scripts\python -m pytest -q
-node --check static/app.js
-```
-
-Set `TASKIQ_TEST_DATABASE_URL` to a **dedicated disposable PostgreSQL test database** to run the same tests there. Tests create/drop a unique schema per test; never use production. CI includes SQLite and PostgreSQL 16 tests, migration drift checks and JavaScript syntax checks.
-
-Optional browser smoke: install Playwright and Chromium in your tooling Python, then run `python scripts/browser_smoke.py`. It uses the repo `.venv` to run an isolated server, seeds a test session directly into its temporary DB, and exercises the UI without adding a login bypass to the app. Screenshots/logs go under ignored `test-results/`. It does not test Google's live consent flow.
-
-`requirements.txt` pins the dependency set; `requirements.in` records direct ranges. Review upgrades and refresh the lock in a clean Python 3.12 environment.
-
-## Deployment
-
-Read [the system design and launch runbook](docs/SYSTEM_DESIGN.md). Production requires HTTPS, PostgreSQL, Google OAuth credentials, a configured edge proxy, backups and operational checks. `APP_ENV=production` refuses missing credentials, HTTP origins and SQLite.
-
-For the existing `ai-project-manager-f6yk.onrender.com` prototype, follow [the Render update guide](docs/RENDER_DEPLOYMENT.md). Its old data can be discarded; use a new PostgreSQL database without importing legacy tasks.
-
-For local Docker/PostgreSQL verification, set a URL-safe `POSTGRES_PASSWORD` in `.env` and run `docker compose up --build`. The app binds `127.0.0.1:8000`; PostgreSQL is not exposed to the host. This is not a public TLS deployment.
-
-AI extraction retains its existing immediate-save behavior; review/approval is Phase 2. Set `AI_ENABLED=false` to run without Gemini. Production defaults to AI disabled unless explicitly enabled. Browser/audio capture and meeting bots are not implemented in Phase 1.
+See the [product roadmap](docs/PRODUCT_ROADMAP.md) for the phase design. TaskIQ's intended value is a useful delivery plan and informed staffing decisions, with meeting content supplying context.

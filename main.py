@@ -11,7 +11,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy import text
 import config
 from database import engine
-from routers import auth, workspaces, tasks
+from routers import auth, workspaces, tasks, meetings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -26,13 +26,13 @@ async def lifespan(app):
     # Fail before serving traffic when migrations have not been applied.
     with startup_engine.connect() as connection:
         version = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        if version != "0001_phase1":
+        if version != "0002_meetings":
             raise RuntimeError("Apply database migrations: alembic upgrade head")
     yield
     startup_engine.dispose()
 
 
-app = FastAPI(title="TaskIQ", version="2.0.0", lifespan=lifespan, docs_url=None if config.PRODUCTION else "/docs", redoc_url=None, openapi_url=None if config.PRODUCTION else "/openapi.json")
+app = FastAPI(title="TaskIQ", version="2.1.0", lifespan=lifespan, docs_url=None if config.PRODUCTION else "/docs", redoc_url=None, openapi_url=None if config.PRODUCTION else "/openapi.json")
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=config.ALLOWED_HOSTS)
 
 
@@ -90,6 +90,7 @@ app.add_middleware(BodyLimitMiddleware)
 app.include_router(auth.router)
 app.include_router(workspaces.router)
 app.include_router(tasks.router)
+app.include_router(meetings.router)
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
 

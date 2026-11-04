@@ -54,7 +54,15 @@ class ExtractRequest(BaseModel):
 
 
 def task_json(t):
-    return {k: getattr(t, k) for k in ("id", "project_id", "description", "due_date", "owner", "assignee_id", "priority", "status")}
+    result = {k: getattr(t, k) for k in ("id", "project_id", "description", "due_date", "owner", "assignee_id", "priority", "status")}
+    proposal = t.source_proposal
+    result["source"] = None if proposal is None else {
+        "meeting_id": proposal.meeting_id, "meeting_title": proposal.meeting.title,
+        "proposal_id": proposal.id, "quote": proposal.source_quote,
+        "start": proposal.source_start, "end": proposal.source_end,
+        "reviewed_at": proposal.reviewed_at,
+    }
+    return result
 
 
 def assignment(db, workspace_id, data):
@@ -113,22 +121,8 @@ def ai_budget(db, project_id, user_id):
 
 @router.post("/extract")
 def extract(project_id: str, body: ExtractRequest, auth: Identity = Depends(identity), db: Session = Depends(get_db)):
-    ai_budget(db, project_id, auth.user.id)
-    with ai_slot():
-        try:
-            raw = llm.extract_tasks_from_text(body.text)
-            if len(raw) > 100:
-                raise ValueError("Too many extracted tasks")
-            # Validate model output locally; ignore the legacy explanation field.
-            values = [TaskFields.model_validate({k: v for k, v in t.items() if k != "reasoning"}).model_dump() for t in raw]
-        except Exception:
-            logger.warning("Task extraction failed")
-            raise HTTPException(502, "Task extraction is unavailable; please try again later")
-    writable(db, project_id, auth.user.id)  # Re-check after potentially long external work.
-    tasks = [Task(project_id=project_id, **v) for v in values]
-    db.add_all(tasks)
-    db.commit()
-    return {"tasks": [task_json(t) for t in tasks]}
+    project_access(db, project_id, auth.user.id, write=True)
+    raise HTTPException(410, "Immediate extraction was replaced by meeting review. Save a meeting, extract proposals, then explicitly accept tasks.")
 
 
 @router.post("/summary")

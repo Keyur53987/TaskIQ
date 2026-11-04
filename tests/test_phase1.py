@@ -185,8 +185,8 @@ def test_extraction_and_summary_are_scoped(client, project, monkeypatch):
     _, w, p = project
     other = client.post(f"/api/workspaces/{w['id']}/projects", json={"name": "Other"}).json()
     client.post(path(other), json={"description": "Secret other project"})
-    monkeypatch.setattr("llm.extract_tasks_from_text", lambda text: [{"description": "Extracted", "owner": "A", "reasoning": "legacy"}])
-    assert client.post(path(p) + "/extract", json={"text": "Sufficiently long meeting notes"}).status_code == 200
+    assert client.post(path(p) + "/extract", json={"text": "Sufficiently long meeting notes"}).status_code == 410
+    client.post(path(p), json={"description": "Project task"})
     seen = []
     def summary(tasks):
         seen.extend(tasks)
@@ -194,17 +194,15 @@ def test_extraction_and_summary_are_scoped(client, project, monkeypatch):
     monkeypatch.setattr("llm.summarize_project_status", summary)
     result = client.post(path(p) + "/summary")
     assert result.status_code == 200
-    assert [t["description"] for t in seen] == ["Extracted"]
+    assert [t["description"] for t in seen] == ["Project task"]
 
 
-def test_extraction_rechecks_removed_membership(client, project, monkeypatch, store):
+def test_retired_extraction_route_cannot_create_tasks(client, project, monkeypatch, store):
     user, w, p = project
     def extract(text):
-        with store.begin() as db:
-            db.delete(db.get(Membership, (w["id"], user["id"])))
-        return [{"description": "Must not save"}]
-    monkeypatch.setattr("llm.extract_tasks_from_text", extract)
-    assert client.post(path(p) + "/extract", json={"text": "Sufficiently long meeting notes"}).status_code == 404
+        raise AssertionError("Retired endpoint must not invoke the provider")
+    monkeypatch.setattr("llm.extract_meeting_proposals", extract)
+    assert client.post(path(p) + "/extract", json={"text": "Sufficiently long meeting notes"}).status_code == 410
     with store() as db:
         assert list(db.scalars(select(Task))) == []
 
@@ -214,9 +212,9 @@ def test_limits_and_errors_do_not_expose_provider_secrets(client, project, monke
     assert client.post(path(p) + "/extract", json={"text": "x" * 20001}).status_code == 422
     def broken(text):
         raise RuntimeError("secret-provider-key")
-    monkeypatch.setattr("llm.extract_tasks_from_text", broken)
+    monkeypatch.setattr("llm.extract_meeting_proposals", broken)
     response = client.post(path(p) + "/extract", json={"text": "Sufficiently long notes"})
-    assert response.status_code == 502 and "secret-provider-key" not in response.text
+    assert response.status_code == 410 and "secret-provider-key" not in response.text
     assert client.post(path(p), content=b"x" * 131073).status_code == 413
 
 
