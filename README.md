@@ -2,9 +2,9 @@
 
 ### From discussion to delivery.
 
-TaskIQ is an AI-assisted project workspace that helps teams turn meeting notes into actionable work. It brings the original discussion, proposed tasks, human review, and project tracking into one place.
+TaskIQ is being built as an AI project manager for software teams: understand client goals, propose the engineering work, match it to team capacity, and adapt the delivery plan as work changes.
 
-I built TaskIQ to address a familiar gap: a team agrees on work in a meeting, but turning that conversation into clear responsibilities and tracking it afterward still takes manual effort. TaskIQ makes that handoff explicit, with a source passage behind each meeting-derived task and a person deciding what reaches the project board.
+I am building TaskIQ for delivery leads who need to turn a client's desired outcome into an executable plan. Clients should not have to specify implementation tickets or decide which developer is available. The product direction is to connect requirements, technical breakdown, dependencies, effort and cross-project capacity, with a lead approving the commitments.
 
 ## Why TaskIQ?
 
@@ -71,8 +71,8 @@ The application uses **Python, FastAPI, Pydantic, SQLAlchemy, PostgreSQL, Google
 
 ## Current scope
 
-The live release provides the workspace and task-management foundation. The meeting-source and proposal-review workflow is implemented in the next release and is awaiting release; live AI inference still needs verification before it is enabled.
+The capabilities and workflow described above are the current foundation, not the completed AI project manager. The live release provides workspace and task management. The meeting-source and proposal-review workflow is implemented on the review branch; live AI inference still needs verification before it is enabled.
 
-Meeting input currently comes from pasted notes and text transcripts. Audio recording, transcription, and agents that join Zoom or Google Meet are future work. Updating existing tasks from follow-up meetings and mapping task dependencies are also planned extensions.
+The next milestones are project/team context, AI technical planning, and capacity-aware assignment across projects. Automatic meeting intake is a parallel integration track, followed by controlled replanning and a separately validated TaskIQ meeting participant. These are planned capabilities, not available features. Meeting text entry remains an input fallback rather than the intended product experience.
 
-TaskIQ's direction is to preserve the connection between what a team discusses, what it commits to, and what it delivers.
+See the [product roadmap](docs/PRODUCT_ROADMAP.md) for the phase design. TaskIQ's intended value is a useful delivery plan and informed staffing decisions, with meeting content supplying context.

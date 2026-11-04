@@ -1,5 +1,7 @@
 # TaskIQ: system design and launch runbook
 
+Product direction and future phase order are defined in [the revised product roadmap](PRODUCT_ROADMAP.md). This runbook describes the current implementation; future planning, capacity allocation and meeting integrations are not implemented by the existing extraction workflow.
+
 ## Architecture
 
 Use a same-origin modular monolith. FastAPI serves the static UI and API; PostgreSQL stores identity, memberships, projects, tasks, sessions, invitations, OAuth flows, quotas, immutable meeting sources and reviewed proposals. Google verifies identity; TaskIQ enforces authorization. No microservices or recording pipeline is required for Phases 1–2.
@@ -95,11 +97,11 @@ Disable/sanitize callback query-string logging at the proxy. Pass request IDs th
 
 Phase 1 covers accounts/profiles, sessions, workspaces/projects, roles/invitations, member assignments, task CRUD and deployment foundations. Phase 2 adds immutable meeting text, transcript imports, source quotes, proposal editing and explicit accept/reject decisions with reviewer/time and version checks. It does not include meeting bots/audio capture, source-transcript editing, general audit event storage, account self-deletion/export, enterprise SSO, billing, per-project ACLs, task-edit conflict detection or durable jobs. Proposal versions protect review edits, not subsequent board-task edits. Document an operator-assisted data deletion process before promising it in a public privacy policy. Public terms/privacy and AI disclosures must match actual operation.
 
-The next differentiating work is Project Change Review and Commitment History, then scope approvals/unresolved commitments, then dependency-based impact. These remain roadmap items rather than Phase 1 claims.
+The revised sequence is project/team context → requirements-to-delivery planning → capacity-aware allocation and connected meeting intake → delivery monitoring/replanning → a separately validated TaskIQ meeting participant. See [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md) for deliverables and release gates. This supersedes the earlier change-review-first sequence.
 
 ## Later roadmap: Google Workspace project agent
 
-Status: deferred candidate; evaluate after the core project-change review and commitment-history workflow. This is not part of Phase 1 or a committed release promise.
+Status: optional context-source expansion, separate from the core delivery-planning roadmap. Evaluate selected email/document context only when core planning needs it. Automatic meeting intake and a joining meeting participant have their own explicit phases in PRODUCT_ROADMAP.md. This section is not a committed release promise.
 
 Goal: let users select project-related Google emails, documents and calendar events, then have TaskIQ propose evidence-backed changes to existing project commitments.
 

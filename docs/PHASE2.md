@@ -82,4 +82,6 @@ All paths are under `/api/projects/{project_id}` and require a valid session. Wr
 
 ## Next phases
 
-Audio transcription/meeting capture, comparisons against existing commitments, commitment history, client scope approvals, unresolved-commitment workflows and dependency impact remain separate future work. This phase provides the source/review foundation, not those features.
+Phase 2 is now the evidence/review foundation for the [revised AI project-manager roadmap](PRODUCT_ROADMAP.md). Next come project/team context, technical delivery planning and capacity-aware allocation. Connected meeting intake is a parallel integration track; controlled replanning and our own meeting participant have explicit later phases. Those capabilities are not implemented here.
+
+Future engineering plans must distinguish derived implementation tasks from actions explicitly discussed in a meeting. Derived work should link to requirements and recorded assumptions; it must not fabricate exact source quotations to fit the Phase 2 proposal schema.
